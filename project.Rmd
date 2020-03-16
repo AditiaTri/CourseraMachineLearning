@@ -1,0 +1,140 @@
+# Title: Predicting Quality of Personal Acitivies using Activity Measurement Devices
+# Author: Aditia Trihadian
+
+
+# Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways.
+
+
+# Data Acquisition
+The training data for this project are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+The test data are available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+The data for this project come from this source: 
+http://groupware.les.inf.puc-rio.br/har
+
+
+# Objective
+The goal of the project is to predict the manner in which users did the exercise. This is the "classe" variable in the training set. We'll use any of the other variables to predict with. We'll then  create a report describing how we built model, how we used cross validation, and what to interpret of the expected out of sample error is.
+
+We will also use prediction model to predict 20 different test cases.
+
+
+# Data Pre-checking
+```{r}
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+
+if (!file.exists("df_mdl.csv")) {
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","df_mdl.csv")
+}
+  
+if (!file.exists("df_qz.csv")) {
+  download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","df_qz.csv")
+}
+
+# Data for Training & Testing (build the model):
+df_mdl <- read.csv("df_mdl.csv")
+
+# Data for Quiz
+df_qz <- read.csv("df_qz.csv")
+```
+
+We see that some columns are irrelevant to the analysis. For example:
+x: Index of the data rows.
+user_name: We're not looking for differences between users.
+timestamps: We're not looking for time-series relationship.
+new_window: Doesn't seem relevant for analysis.
+num_window: Doesn't seem relevant for analysis.
+
+We'll drop those columns:
+```{r}
+drops <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp",  "new_window", "num_window")
+df_mdl <- df_mdl[ , !(names(df_mdl) %in% drops)]
+df_qz <- df_qz[ , !(names(df_qz) %in% drops)]
+```
+
+Next, we discover, through summary(), that some numeric columns are filled with "#DIV/0!", and were turned into factor data types. We'll discard these columns, as it's impossible to interpret their true values.
+
+```{r}
+# Note: we'll keep the label variable classe
+drop_factors <- names((Filter(is.factor, df_mdl)))
+drop_factors = drop_factors[drop_factors!= "classe"]
+
+df_mdl <- df_mdl[ , !(names(df_mdl) %in% drop_factors)]
+df_qz <- df_qz[ , !(names(df_qz) %in% drop_factors)]
+```
+
+Next, we discover, through summary(), that some numeric columns are not complete (NA), and won't be suitable for analysis. We'll discard these columns.
+
+```{r}
+drop_na <- colnames(df_mdl[colSums(is.na(df_mdl)) > 0])
+
+df_mdl <- df_mdl[ , !(names(df_mdl) %in% drop_na)]
+df_qz <- df_qz[ , !(names(df_qz) %in% drop_na)]
+
+#names(df_tr)
+#names(df_qz)
+```
+
+We're left with 53 columns:
+1 as label "classe"
+52 as features
+
+We'll split the data into training and testing sets
+```{r}
+df_part <- createDataPartition(y=df_mdl$classe, p=0.8, list=FALSE )
+df_tr <- df_mdl[df_part,]
+df_ts <- df_mdl[-df_part,]
+```
+
+
+# Data Analysis
+We'll use R's rpart (Recursive Partitioning and Regression Trees) model.
+
+```{r}
+mdl <- rpart(classe ~ ., data=df_tr, method="class")
+
+# We'll use maximum of 300 ntre parameter for performance consideration
+mdl <- randomForest(classe ~ ., data=df_tr, ntree=300)
+```
+This a figure of the decision tree provided by our model.
+
+
+# In-Sample Prediction
+
+```{r}
+pred_tr <- predict(mdl, newdata=df_tr, type = "class")
+confusionMatrix(pred_tr,df_tr$classe)
+```
+
+
+# Out-of-Sample Prediction
+```{r}
+pred_ts <- predict(mdl, newdata=df_ts, type = "class")
+confusionMatrix(pred_ts,df_ts$classe)
+```
+
+As we see the results from confusion matrix, the model is excellent because it has an overall accuracy of 0.9954 with very good sensitivity & specificity values (as predicted on the 20% out-of-sample dataset). 
+The highest value is 0.9991 for the sensitivity of the class A.
+The lowest value is 0.9883 for the sensitivity of the class C.
+
+```{r}
+
+error_rate_ts <- sum(pred_ts != df_ts$classe) / nrow(df_ts)
+
+print(error_rate_ts)
+```
+
+Our expected error rate is <0.5%
+This means that, our model could predict the Human Activity Quality (based on classe), using the available features variables with less than 0.5% error rate.
+
+
+# Quiz Prediction
+```{r}
+pred_qz <- predict(mdl, newdata=df_qz, type = "class")
+pred_qz
+```
